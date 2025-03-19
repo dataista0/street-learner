@@ -7,7 +7,7 @@ import { multiLineString, nearestPointOnLine, point } from "@turf/turf";
 import allStreetNames from "../public/streetNames2.json";
 
 // Change this constant for debugging (e.g., 3) or full game (10)
-const TOTAL_ROUNDS = 4;
+const TOTAL_ROUNDS = 5;
 
 export default function App() {
   // Game state
