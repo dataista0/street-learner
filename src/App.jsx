@@ -7,7 +7,7 @@ import { multiLineString, nearestPointOnLine, point } from "@turf/turf";
 import allStreetNames from "../public/streetNames2.json";
 
 // Change this constant for debugging (e.g., 3) or full game (10)
-const TOTAL_ROUNDS = 5;
+const TOTAL_ROUNDS = 4;
 
 export default function App() {
   // Game state
@@ -102,7 +102,7 @@ export default function App() {
     setUserClick(null);
     setClosestPoint(null);
     setErrorDistance(null);
-    //setSubmitted(false);
+    setSubmitted(false);
 
     if (streetNames.length > 0 && streetNames[currentIndex]) {
       // Try to get precomputed geometry first.
@@ -161,7 +161,6 @@ export default function App() {
     } else {
       setShowFinalModal(true);
     }
-    setSubmitted(false);
   }
 
   function handleRestart() {
@@ -232,6 +231,7 @@ export default function App() {
           </p>
         )}
       </div>
+      
 
       {/* Final Modal */}
       {showFinalModal && (
@@ -252,6 +252,11 @@ export default function App() {
                 Restart Game
               </button>
             </div>
+            <div className="text-right mt-4">
+              <a href="https://julianpeller.com.ar/tree" target="_blank" rel="noopener noreferrer" className="text-white underline">
+                julianpeller.com.ar/tree
+              </a>
+            </div>
           </div>
         </div>
       )}
@@ -268,7 +273,8 @@ export default function App() {
               Discover the hidden streets of the City of Buenos Aires.
               In this game, you'll be challenged to locate real streets on a map without labels.
               Place your guess and see how close you get to the actual location.
-              Compete through {TOTAL_ROUNDS} rounds to achieve the best score.
+              Compete through {TOTAL_ROUNDS+1} rounds to achieve the best score.
+
             </p>
             <div className="text-right">
               <button
@@ -277,6 +283,11 @@ export default function App() {
               >
                 Start Game
               </button>
+            </div>
+            <div className="text-right mt-4">
+              <a href="https://julianpeller.com.ar/tree" target="_blank" rel="noopener noreferrer" className="text-white underline">
+                julianpeller.com.ar/tree
+              </a>
             </div>
           </div>
         </div>
