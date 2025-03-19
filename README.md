@@ -14,3 +14,9 @@ A web-based map game built with React + Vite, Leaflet.js, Turf.js, and Tailwind 
 1. Clone the repo.
 2. Run `npm install`
 3. Run `npm run dev` and open the provided URL in your browser.
+
+
+## Deployed
+
+The game is available here:
+https://street-learner-dataista0s-projects.vercel.app/
