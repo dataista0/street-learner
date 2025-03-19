@@ -1,8 +1,8 @@
-import React, { useEffect, useRef } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import React, { useEffect, useRef } from "react";
+import L from "leaflet";
+import "leaflet/dist/leaflet.css";
 
-function MapView({ currentStreet, userClick, closestPoint, onMapClick, submitted }) {
+export default function MapView({ streetGeometry, userClick, closestPoint, onMapClick }) {
   const mapRef = useRef(null);
   const streetLayerRef = useRef(null);
   const markerRef = useRef(null);
@@ -11,55 +11,83 @@ function MapView({ currentStreet, userClick, closestPoint, onMapClick, submitted
   // Initialize the map only once
   useEffect(() => {
     if (!mapRef.current) {
-      mapRef.current = L.map('map', {
+      mapRef.current = L.map("map", {
         center: [-34.6037, -58.3816],
         zoom: 13,
       });
 
-      // Use label-free tile layer
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors &copy; CARTO'
-      }).addTo(mapRef.current);
+      L.tileLayer(
+        "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
+        {
+          attribution: "&copy; OpenStreetMap &copy; CARTO",
+        }
+      ).addTo(mapRef.current);
 
-      mapRef.current.on('click', function(e) {
+      mapRef.current.on("click", (e) => {
         onMapClick(e.latlng);
       });
     }
   }, [onMapClick]);
 
-  // Draw the street (red line) only after submission
+  // Draw the street geometry (red lines) after submission.
   useEffect(() => {
     if (!mapRef.current) return;
+    // Remove old geometry if any
     if (streetLayerRef.current) {
       mapRef.current.removeLayer(streetLayerRef.current);
       streetLayerRef.current = null;
     }
-    if (submitted && currentStreet && currentStreet.coordinates) {
-      streetLayerRef.current = L.polyline(currentStreet.coordinates, { color: 'red' }).addTo(mapRef.current);
+    if (!streetGeometry) {
+      console.log("No street geometry to render yet.");
+      return;
     }
-  }, [currentStreet, submitted]);
+    // If the geometry is wrapped as a GeoJSON Feature, extract its inner geometry.
+    let geom = streetGeometry;
+    if (geom.type === "Feature") {
+      geom = geom.geometry;
+    }
+    let lines = [];
+    if (geom.type === "LineString") {
+      lines = [geom.coordinates];
+    } else if (geom.type === "MultiLineString") {
+      lines = geom.coordinates;
+    } else {
+      console.log("Unsupported geometry type:", geom.type);
+      return;
+    }
+    // Convert each segment from [lon, lat] to [lat, lon]
+    const polylines = lines.map((segment) =>
+      segment.map(([lon, lat]) => [lat, lon])
+    );
+    // Create a feature group with polylines
+    streetLayerRef.current = L.featureGroup(
+      polylines.map((coords) => L.polyline(coords, { color: "red" }))
+    ).addTo(mapRef.current);
+  }, [streetGeometry]);
 
-  // Update user marker and draw blue line after submission
+  // Draw user marker and the dashed line to the closest point.
   useEffect(() => {
     if (!mapRef.current) return;
     if (markerRef.current) {
       mapRef.current.removeLayer(markerRef.current);
-    }
-    if (userClick) {
-      markerRef.current = L.marker(userClick).addTo(mapRef.current);
+      markerRef.current = null;
     }
     if (lineLayerRef.current) {
       mapRef.current.removeLayer(lineLayerRef.current);
       lineLayerRef.current = null;
     }
-    if (submitted && userClick && closestPoint) {
-      lineLayerRef.current = L.polyline([userClick, closestPoint], { color: 'blue', dashArray: '5,5' }).addTo(mapRef.current);
+    // If user clicked, place a marker
+    if (userClick) {
+      markerRef.current = L.marker(userClick).addTo(mapRef.current);
     }
-  }, [userClick, closestPoint, submitted]);
+    // If we have a closest point, draw a dashed line
+    if (userClick && closestPoint) {
+      lineLayerRef.current = L.polyline([userClick, closestPoint], {
+        color: "blue",
+        dashArray: "5,5",
+      }).addTo(mapRef.current);
+    }
+  }, [userClick, closestPoint]);
 
-  return (
-    <div id="map" className="flex-1"></div>
-  );
+  return <div id="map" className="flex-1"></div>;
 }
-
-export default MapView;

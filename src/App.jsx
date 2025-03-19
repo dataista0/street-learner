@@ -1,104 +1,187 @@
-import React, { useState } from 'react';
-import MapView from './components/MapView';
-import ScoreBoard from './components/ScoreBoard';
-import { point, lineString, nearestPointOnLine } from '@turf/turf';
+import React, { useEffect, useState } from "react";
+import MapView from "./components/MapView";
+import ScoreBoard from "./components/ScoreBoard";
+import { multiLineString, nearestPointOnLine, point } from "@turf/turf";
 
-// Dummy data for 10 streets in Buenos Aires (coordinates are [lat, lng])
-const streets = [
-  { name: "Avenida de Mayo",         coordinates: [[-34.606, -58.381], [-34.603, -58.376]] },
-  { name: "Calle Florida",           coordinates: [[-34.605, -58.380], [-34.603, -58.378]] },
-  { name: "Avenida 9 de Julio",      coordinates: [[-34.609, -58.384], [-34.603, -58.371]] },
-  { name: "Calle Corrientes",        coordinates: [[-34.603, -58.381], [-34.603, -58.375]] },
-  { name: "Avenida Libertador",      coordinates: [[-34.587, -58.416], [-34.603, -58.383]] },
-  { name: "Calle San Martín",        coordinates: [[-34.605, -58.389], [-34.603, -58.382]] },
-  { name: "Calle Rivadavia",         coordinates: [[-34.609, -58.389], [-34.600, -58.377]] },
-  { name: "Calle Alsina",            coordinates: [[-34.605, -58.382], [-34.603, -58.379]] },
-  { name: "Avenida Callao",          coordinates: [[-34.608, -58.383], [-34.605, -58.377]] },
-  { name: "Avenida del Libertador",  coordinates: [[-34.591, -58.400], [-34.603, -58.383]] }
-];
+// Import your local street names JSON (ensure streetNames2.json is in public folder)
+// Vite will bundle JSON imports automatically.
+import allStreetNames from "../public/streetNames2.json";
 
-function App() {
+export default function App() {
+  // State to store 10 random street names.
+  const [streetNames, setStreetNames] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const currentStreet = streets[currentIndex];
+  const [streetGeometry, setStreetGeometry] = useState(null);
   const [userClick, setUserClick] = useState(null);
   const [closestPoint, setClosestPoint] = useState(null);
   const [errorDistance, setErrorDistance] = useState(null);
   const [submitted, setSubmitted] = useState(false);
   const [guessedStreets, setGuessedStreets] = useState([]);
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [loadingNames, setLoadingNames] = useState(true);
+  const [loadingGeometry, setLoadingGeometry] = useState(false);
 
-  // Allow multiple clicks until submission; disable further clicks after submission
-  function handleMapClick(latlng) {
-    if (submitted) return;
-    setUserClick(latlng);
-  }
+  // On mount, pick 10 random street names.
+  useEffect(() => {
+    console.log("Selecting 10 random streets from local JSON...");
+    if (allStreetNames && allStreetNames.length > 0) {
+      const shuffled = [...allStreetNames].sort(() => 0.5 - Math.random());
+      const picked = shuffled.slice(0, 10);
+      setStreetNames(picked);
+      console.log("Picked:", picked);
+    } else {
+      setErrorMsg("No street names found in local JSON.");
+    }
+    setLoadingNames(false);
+  }, []);
 
-  function handleSubmit() {
-    if (!userClick) return;
-    const clickedPoint = point([userClick.lng, userClick.lat]);
-    const line = lineString(currentStreet.coordinates.map(coord => [coord[1], coord[0]]));
-    const snapped = nearestPointOnLine(line, clickedPoint, { units: 'meters' });
-    setClosestPoint({ lat: snapped.geometry.coordinates[1], lng: snapped.geometry.coordinates[0] });
-    const dist = snapped.properties.dist;
-    setErrorDistance(dist);
-    // Convert error to kilometers with one decimal place
-    const errorKm = parseFloat((dist / 1000).toFixed(1));
-    // Record the guessed street result
-    setGuessedStreets(prev => [...prev, { name: currentStreet.name, errorKm }]);
-    setSubmitted(true);
-  }
+  // When the current street changes, fetch its geometry from Overpass.
+  useEffect(() => {
+    async function fetchStreetGeometry(streetName) {
+      console.log("Fetching geometry for:", streetName);
+      try {
+        setLoadingGeometry(true);
+        setStreetGeometry(null);
+        setErrorMsg(null);
 
-  function handleNext() {
+        const overpassUrl = "https://overpass-api.de/api/interpreter";
+        const query = `
+          [out:json];
+          area[name="Ciudad Autónoma de Buenos Aires"]->.searchArea;
+          way(area.searchArea)["name"="${streetName}"];
+          out geom;
+        `;
+        const response = await fetch(overpassUrl, {
+          method: "POST",
+          body: query,
+        });
+        if (!response.ok) {
+          throw new Error(`Overpass returned ${response.status}`);
+        }
+        const data = await response.json();
+        console.log("Geometry fetch result for", streetName, data);
+        const ways = data.elements.filter(
+          (el) => el.type === "way" && el.geometry
+        );
+        if (ways.length === 0) {
+          throw new Error("No geometry found for " + streetName);
+        }
+        const multiCoords = ways.map((way) =>
+          way.geometry.map((g) => [g.lon, g.lat])
+        );
+        const mls = multiLineString(multiCoords);
+        setStreetGeometry(mls);
+        console.log("Constructed MultiLineString for", streetName, mls);
+      } catch (err) {
+        console.error("Error fetching geometry for", streetName, err);
+        setErrorMsg(err.message);
+      } finally {
+        setLoadingGeometry(false);
+      }
+    }
+    // Reset guess state when moving to a new street.
     setUserClick(null);
     setClosestPoint(null);
     setErrorDistance(null);
     setSubmitted(false);
-    if (currentIndex < streets.length - 1) {
+    if (streetNames.length > 0 && streetNames[currentIndex]) {
+      fetchStreetGeometry(streetNames[currentIndex]);
+    }
+  }, [streetNames, currentIndex]);
+
+  // Handle map click (user’s guess).
+  function handleMapClick(latlng) {
+    if (submitted) {
+      console.log("Ignoring map click after submission");
+      return;
+    }
+    console.log("Map clicked at", latlng);
+    setUserClick(latlng);
+  }
+
+  // On submit, compute the error distance.
+  function handleSubmit() {
+    if (!userClick || !streetGeometry) {
+      console.log("Cannot submit. userClick or streetGeometry is missing.");
+      return;
+    }
+    console.log("Submitting guess...");
+    const clickedPt = point([userClick.lng, userClick.lat]);
+    const snapped = nearestPointOnLine(streetGeometry, clickedPt, {
+      units: "meters",
+    });
+    const dist = snapped.properties.dist;
+    console.log("Distance (m):", dist);
+    setClosestPoint({
+      lat: snapped.geometry.coordinates[1],
+      lng: snapped.geometry.coordinates[0],
+    });
+    setErrorDistance(dist);
+    const errorKm = parseFloat((dist / 1000).toFixed(1));
+    const streetName = streetNames[currentIndex];
+    setGuessedStreets((prev) => [...prev, { name: streetName, errorKm }]);
+    setSubmitted(true);
+  }
+
+  // Move to the next round (or restart the game).
+  function handleNext() {
+    console.log("Next button clicked.");
+    if (currentIndex < streetNames.length - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      alert("Game over! Your total error is " + 
-            guessedStreets.reduce((sum, entry) => sum + entry.errorKm, 0).toFixed(1) + "km");
+      const totalKm = guessedStreets
+        .reduce((sum, s) => sum + s.errorKm, 0)
+        .toFixed(1);
+      alert(`Game over! Total error: ${totalKm}km`);
       setCurrentIndex(0);
       setGuessedStreets([]);
     }
   }
 
-  // Compute total score as the sum of errors (in km)
-  const totalScore = guessedStreets.reduce((sum, entry) => sum + entry.errorKm, 0).toFixed(1);
+  const totalScore = guessedStreets
+    .reduce((sum, s) => sum + s.errorKm, 0)
+    .toFixed(1);
+  const currentStreetName = streetNames[currentIndex] || "N/A";
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Top header with current street name */}
+      {/* Top header */}
       <div className="p-4 bg-gray-200 fixed top-0 w-full h-16 flex items-center justify-center text-3xl font-bold">
-        {currentStreet.name}
+        {loadingNames
+          ? "Loading local JSON..."
+          : errorMsg
+          ? `Error: ${errorMsg}`
+          : loadingGeometry
+          ? "Loading geometry..."
+          : currentStreetName}
       </div>
-      
-      {/* Main content area: Map and ScoreBoard side panel */}
+      {/* Main content: Map & Scoreboard */}
       <div className="flex flex-1 pt-16 pb-20">
-        <MapView 
-          currentStreet={currentStreet} 
-          userClick={userClick} 
+        <MapView
+          streetGeometry={submitted ? streetGeometry : null}
+          userClick={userClick}
           closestPoint={submitted ? closestPoint : null}
           onMapClick={handleMapClick}
-          submitted={submitted}
-          className="flex-1"
         />
-        <ScoreBoard 
-          guessedStreets={guessedStreets} 
-          currentStreet={currentStreet} 
-          submitted={submitted} 
+        <ScoreBoard
+          guessedStreets={guessedStreets}
+          currentStreet={
+            !submitted && currentStreetName
+              ? { name: currentStreetName, errorKm: "?" }
+              : null
+          }
           totalScore={totalScore}
         />
       </div>
-      
-      {/* Bottom fixed instruction bar */}
+      {/* Bottom bar with instructions and buttons */}
       <div className="p-4 fixed bottom-0 w-full bg-white flex items-center justify-center h-20">
-        {userClick && !submitted ? (
-          <button onClick={handleSubmit} className="bg-green-500 text-white px-4 py-2 rounded">
-            Submit
-          </button>
-        ) : submitted ? (
+        {submitted ? (
           <button onClick={handleNext} className="bg-blue-500 text-white px-4 py-2 rounded">
             Next
+          </button>
+        ) : userClick ? (
+          <button onClick={handleSubmit} className="bg-green-500 text-white px-4 py-2 rounded">
+            Submit
           </button>
         ) : (
           <p>Please click on the map for the location</p>
@@ -107,5 +190,3 @@ function App() {
     </div>
   );
 }
-
-export default App;
