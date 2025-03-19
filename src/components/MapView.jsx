@@ -8,21 +8,16 @@ export default function MapView({ streetGeometry, userClick, closestPoint, onMap
   const markerRef = useRef(null);
   const lineLayerRef = useRef(null);
 
-  // Initialize the map only once
+  // Initialize the map only once.
   useEffect(() => {
     if (!mapRef.current) {
       mapRef.current = L.map("map", {
         center: [-34.6037, -58.3816],
         zoom: 13,
       });
-
-      L.tileLayer(
-        "https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png",
-        {
-          attribution: "&copy; OpenStreetMap &copy; CARTO",
-        }
-      ).addTo(mapRef.current);
-
+      L.tileLayer("https://{s}.basemaps.cartocdn.com/light_nolabels/{z}/{x}/{y}.png", {
+        attribution: "&copy; OpenStreetMap &copy; CARTO",
+      }).addTo(mapRef.current);
       mapRef.current.on("click", (e) => {
         onMapClick(e.latlng);
       });
@@ -32,7 +27,6 @@ export default function MapView({ streetGeometry, userClick, closestPoint, onMap
   // Draw the street geometry (red lines) after submission.
   useEffect(() => {
     if (!mapRef.current) return;
-    // Remove old geometry if any
     if (streetLayerRef.current) {
       mapRef.current.removeLayer(streetLayerRef.current);
       streetLayerRef.current = null;
@@ -41,7 +35,7 @@ export default function MapView({ streetGeometry, userClick, closestPoint, onMap
       console.log("No street geometry to render yet.");
       return;
     }
-    // If the geometry is wrapped as a GeoJSON Feature, extract its inner geometry.
+    // Unwrap Feature if needed.
     let geom = streetGeometry;
     if (geom.type === "Feature") {
       geom = geom.geometry;
@@ -55,17 +49,15 @@ export default function MapView({ streetGeometry, userClick, closestPoint, onMap
       console.log("Unsupported geometry type:", geom.type);
       return;
     }
-    // Convert each segment from [lon, lat] to [lat, lon]
     const polylines = lines.map((segment) =>
       segment.map(([lon, lat]) => [lat, lon])
     );
-    // Create a feature group with polylines
     streetLayerRef.current = L.featureGroup(
       polylines.map((coords) => L.polyline(coords, { color: "red" }))
     ).addTo(mapRef.current);
   }, [streetGeometry]);
 
-  // Draw user marker and the dashed line to the closest point.
+  // Draw user marker and dashed line.
   useEffect(() => {
     if (!mapRef.current) return;
     if (markerRef.current) {
@@ -76,11 +68,9 @@ export default function MapView({ streetGeometry, userClick, closestPoint, onMap
       mapRef.current.removeLayer(lineLayerRef.current);
       lineLayerRef.current = null;
     }
-    // If user clicked, place a marker
     if (userClick) {
       markerRef.current = L.marker(userClick).addTo(mapRef.current);
     }
-    // If we have a closest point, draw a dashed line
     if (userClick && closestPoint) {
       lineLayerRef.current = L.polyline([userClick, closestPoint], {
         color: "blue",

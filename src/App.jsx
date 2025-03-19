@@ -3,12 +3,14 @@ import MapView from "./components/MapView";
 import ScoreBoard from "./components/ScoreBoard";
 import { multiLineString, nearestPointOnLine, point } from "@turf/turf";
 
-// Import your local street names JSON (ensure streetNames2.json is in public folder)
-// Vite will bundle JSON imports automatically.
+// Import your local street names JSON (placed in public folder)
 import allStreetNames from "../public/streetNames2.json";
 
+// Change this constant to 3 for debugging (or 10 for full game)
+const TOTAL_ROUNDS = 10;
+
 export default function App() {
-  // State to store 10 random street names.
+  // Game state
   const [streetNames, setStreetNames] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [streetGeometry, setStreetGeometry] = useState(null);
@@ -20,13 +22,15 @@ export default function App() {
   const [errorMsg, setErrorMsg] = useState(null);
   const [loadingNames, setLoadingNames] = useState(true);
   const [loadingGeometry, setLoadingGeometry] = useState(false);
+  const [showFinalModal, setShowFinalModal] = useState(false);
+  const [showIntroModal, setShowIntroModal] = useState(true);
 
-  // On mount, pick 10 random street names.
+  // On mount, pick TOTAL_ROUNDS random street names.
   useEffect(() => {
-    console.log("Selecting 10 random streets from local JSON...");
+    console.log("Selecting random streets from local JSON...");
     if (allStreetNames && allStreetNames.length > 0) {
       const shuffled = [...allStreetNames].sort(() => 0.5 - Math.random());
-      const picked = shuffled.slice(0, 10);
+      const picked = shuffled.slice(0, TOTAL_ROUNDS);
       setStreetNames(picked);
       console.log("Picked:", picked);
     } else {
@@ -35,10 +39,10 @@ export default function App() {
     setLoadingNames(false);
   }, []);
 
-  // When the current street changes, fetch its geometry from Overpass.
+  // Whenever currentIndex or streetNames changes, load geometry.
   useEffect(() => {
     async function fetchStreetGeometry(streetName) {
-      console.log("Fetching geometry for:", streetName);
+      console.log("Fetching geometry from Overpass for:", streetName);
       try {
         setLoadingGeometry(true);
         setStreetGeometry(null);
@@ -79,17 +83,42 @@ export default function App() {
         setLoadingGeometry(false);
       }
     }
-    // Reset guess state when moving to a new street.
+
+    async function getPrecomputedGeometry(streetName) {
+      try {
+        const res = await fetch("/streetGeometries.json");
+        if (!res.ok) {
+          throw new Error("Failed to load precomputed geometries.");
+        }
+        const precomputed = await res.json();
+        return precomputed[streetName] || null;
+      } catch (error) {
+        console.error("Error loading precomputed geometries:", error);
+        return null;
+      }
+    }
+
+    // Reset guess state for new round.
     setUserClick(null);
     setClosestPoint(null);
     setErrorDistance(null);
     setSubmitted(false);
+
     if (streetNames.length > 0 && streetNames[currentIndex]) {
-      fetchStreetGeometry(streetNames[currentIndex]);
+      // Try to get precomputed geometry first.
+      getPrecomputedGeometry(streetNames[currentIndex]).then((preGeom) => {
+        if (preGeom) {
+          console.log("Using precomputed geometry for", streetNames[currentIndex]);
+          setStreetGeometry(preGeom);
+          setLoadingGeometry(false);
+        } else {
+          fetchStreetGeometry(streetNames[currentIndex]);
+        }
+      });
     }
   }, [streetNames, currentIndex]);
 
-  // Handle map click (user’s guess).
+  // Handle map click (user's guess).
   function handleMapClick(latlng) {
     if (submitted) {
       console.log("Ignoring map click after submission");
@@ -99,7 +128,7 @@ export default function App() {
     setUserClick(latlng);
   }
 
-  // On submit, compute the error distance.
+  // On submit, compute error distance.
   function handleSubmit() {
     if (!userClick || !streetGeometry) {
       console.log("Cannot submit. userClick or streetGeometry is missing.");
@@ -123,19 +152,21 @@ export default function App() {
     setSubmitted(true);
   }
 
-  // Move to the next round (or restart the game).
+  // Handle "Next" button click.
   function handleNext() {
     console.log("Next button clicked.");
-    if (currentIndex < streetNames.length - 1) {
+    if (currentIndex < TOTAL_ROUNDS - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      const totalKm = guessedStreets
-        .reduce((sum, s) => sum + s.errorKm, 0)
-        .toFixed(1);
-      alert(`Game over! Total error: ${totalKm}km`);
-      setCurrentIndex(0);
-      setGuessedStreets([]);
+      // Show final modal.
+      setShowFinalModal(true);
     }
+  }
+
+  function handleRestart() {
+    setCurrentIndex(0);
+    setGuessedStreets([]);
+    setShowFinalModal(false);
   }
 
   const totalScore = guessedStreets
@@ -145,18 +176,19 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-screen">
-      {/* Top header */}
-      <div className="p-4 bg-gray-200 fixed top-0 w-full h-16 flex items-center justify-center text-3xl font-bold">
+      {/* Top panel */}
+      <div className="p-4 bg-blue-200 fixed top-0 w-full h-20 flex items-center justify-center text-4xl font-extrabold shadow-md">
         {loadingNames
-          ? "Loading local JSON..."
+          ? "Loading street names..."
           : errorMsg
           ? `Error: ${errorMsg}`
           : loadingGeometry
           ? "Loading geometry..."
           : currentStreetName}
       </div>
-      {/* Main content: Map & Scoreboard */}
-      <div className="flex flex-1 pt-16 pb-20">
+
+      {/* Main content: Map & ScoreBoard */}
+      <div className="flex flex-1 pt-20 pb-24">
         <MapView
           streetGeometry={submitted ? streetGeometry : null}
           userClick={userClick}
@@ -173,20 +205,72 @@ export default function App() {
           totalScore={totalScore}
         />
       </div>
-      {/* Bottom bar with instructions and buttons */}
-      <div className="p-4 fixed bottom-0 w-full bg-white flex items-center justify-center h-20">
+
+      {/* Bottom panel */}
+      <div className="p-4 fixed bottom-0 w-full h-24 bg-blue-200 flex items-center justify-center text-xl font-semibold shadow-inner">
         {submitted ? (
-          <button onClick={handleNext} className="bg-blue-500 text-white px-4 py-2 rounded">
+          <button
+            onClick={handleNext}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg shadow-md"
+          >
             Next
           </button>
         ) : userClick ? (
-          <button onClick={handleSubmit} className="bg-green-500 text-white px-4 py-2 rounded">
+          <button
+            onClick={handleSubmit}
+            className="bg-green-600 text-white px-6 py-2 rounded-lg shadow-md"
+          >
             Submit
           </button>
         ) : (
-          <p>Please click on the map for the location</p>
+          <p>Please click on the map to guess the location</p>
         )}
       </div>
+
+      {/* Final Modal */}
+      {showFinalModal && (
+        <div
+          className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
+          style={{ zIndex: 9999 }}
+        >
+          <div className="bg-white rounded-lg p-6 w-80 text-center shadow-xl">
+            <h3 className="text-2xl font-bold mb-4">Game Over!</h3>
+            <p className="mb-4">Total error: {totalScore}km</p>
+            <button
+              onClick={handleRestart}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md"
+            >
+              Restart Game
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Intro Modal */}
+      {showIntroModal && (
+        <div
+          className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
+          style={{ zIndex: 10000 }}
+        >
+          <div className="bg-white rounded-lg p-6 w-[40rem] text-center shadow-xl">
+            <h3 className="text-2xl font-bold mb-4">Welcome to Streets of Buenos Aires!</h3>
+            <p className="text-left mb-4">
+              <ul>
+              <li>In this game, you'll be given street names from the City of Buenos Aires.</li><br/>
+              <li>You will have to guess its location by clicking on the map and pits location, then press "Submit" to see the actual street, a dashed blue line showing your error, and your score.</li><br/>
+              <li> The game consists of {TOTAL_ROUNDS} rounds.</li><br/>
+              </ul>
+              Good luck!
+            </p>
+            <button
+              onClick={() => setShowIntroModal(false)}
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md"
+            >
+              Start Game
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
