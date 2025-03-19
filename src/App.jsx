@@ -214,7 +214,7 @@ export default function App() {
         {submitted ? (
           <button
             onClick={handleNext}
-            className="bg-blue-700 text-white px-6 py-2 rounded-full shadow-lg transition hover:bg-blue-800"
+            className="bg-green-500 text-white px-6 py-2 rounded-full shadow-lg transition hover:bg-green-600"
           >
             Next
           </button>
