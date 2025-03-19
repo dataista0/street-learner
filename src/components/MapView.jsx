@@ -2,12 +2,13 @@ import React, { useEffect, useRef } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 
-export default function MapView({ streetGeometry, userClick, closestPoint, onMapClick }) {
+export default function MapView({ streetGeometry, userClick, closestPoint, onMapClick, submitted }) {
   const mapRef = useRef(null);
   const streetLayerRef = useRef(null);
   const markerRef = useRef(null);
   const lineLayerRef = useRef(null);
 
+  
   // Initialize the map only once.
   useEffect(() => {
     if (!mapRef.current) {
@@ -19,7 +20,7 @@ export default function MapView({ streetGeometry, userClick, closestPoint, onMap
         attribution: "&copy; OpenStreetMap &copy; CARTO",
       }).addTo(mapRef.current);
       mapRef.current.on("click", (e) => {
-        onMapClick(e.latlng);
+        onMapClick(e.latlng, submitted);
       });
     }
   }, [onMapClick]);
@@ -53,13 +54,14 @@ export default function MapView({ streetGeometry, userClick, closestPoint, onMap
       segment.map(([lon, lat]) => [lat, lon])
     );
     streetLayerRef.current = L.featureGroup(
-      polylines.map((coords) => L.polyline(coords, { color: "red" }))
+      polylines.map((coords) => L.polyline(coords, { color: "red", weight: 4 }))
     ).addTo(mapRef.current);
   }, [streetGeometry]);
 
   // Draw user marker and dashed line.
   useEffect(() => {
     if (!mapRef.current) return;
+
     if (markerRef.current) {
       mapRef.current.removeLayer(markerRef.current);
       markerRef.current = null;
@@ -75,6 +77,7 @@ export default function MapView({ streetGeometry, userClick, closestPoint, onMap
       lineLayerRef.current = L.polyline([userClick, closestPoint], {
         color: "blue",
         dashArray: "5,5",
+        weight: 3,
       }).addTo(mapRef.current);
     }
   }, [userClick, closestPoint]);

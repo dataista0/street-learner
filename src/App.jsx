@@ -3,11 +3,11 @@ import MapView from "./components/MapView";
 import ScoreBoard from "./components/ScoreBoard";
 import { multiLineString, nearestPointOnLine, point } from "@turf/turf";
 
-// Import your local street names JSON (placed in public folder)
+// Import local street names JSON (ensure streetNames2.json is in public/)
 import allStreetNames from "../public/streetNames2.json";
 
-// Change this constant to 3 for debugging (or 10 for full game)
-const TOTAL_ROUNDS = 10;
+// Change this constant for debugging (e.g., 3) or full game (10)
+const TOTAL_ROUNDS = 5;
 
 export default function App() {
   // Game state
@@ -102,7 +102,7 @@ export default function App() {
     setUserClick(null);
     setClosestPoint(null);
     setErrorDistance(null);
-    setSubmitted(false);
+    //setSubmitted(false);
 
     if (streetNames.length > 0 && streetNames[currentIndex]) {
       // Try to get precomputed geometry first.
@@ -119,7 +119,8 @@ export default function App() {
   }, [streetNames, currentIndex]);
 
   // Handle map click (user's guess).
-  function handleMapClick(latlng) {
+  function handleMapClick(latlng, submitted) {
+    console.log("Submitted is", submitted);
     if (submitted) {
       console.log("Ignoring map click after submission");
       return;
@@ -158,9 +159,9 @@ export default function App() {
     if (currentIndex < TOTAL_ROUNDS - 1) {
       setCurrentIndex(currentIndex + 1);
     } else {
-      // Show final modal.
       setShowFinalModal(true);
     }
+    setSubmitted(false);
   }
 
   function handleRestart() {
@@ -177,14 +178,16 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen">
       {/* Top panel */}
-      <div className="p-4 bg-blue-200 fixed top-0 w-full h-20 flex items-center justify-center text-4xl font-extrabold shadow-md">
-        {loadingNames
-          ? "Loading street names..."
-          : errorMsg
-          ? `Error: ${errorMsg}`
-          : loadingGeometry
-          ? "Loading geometry..."
-          : currentStreetName}
+      <div className="fixed top-0 w-full h-20 flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 shadow-xl">
+        <span className="text-4xl font-extrabold text-white">
+          {loadingNames
+            ? "Loading street names..."
+            : errorMsg
+            ? `Error: ${errorMsg}`
+            : loadingGeometry
+            ? "Loading geometry..."
+            : currentStreetName}
+        </span>
       </div>
 
       {/* Main content: Map & ScoreBoard */}
@@ -194,6 +197,7 @@ export default function App() {
           userClick={userClick}
           closestPoint={submitted ? closestPoint : null}
           onMapClick={handleMapClick}
+          submitted={submitted}
         />
         <ScoreBoard
           guessedStreets={guessedStreets}
@@ -207,41 +211,47 @@ export default function App() {
       </div>
 
       {/* Bottom panel */}
-      <div className="p-4 fixed bottom-0 w-full h-24 bg-blue-200 flex items-center justify-center text-xl font-semibold shadow-inner">
+      <div className="fixed bottom-0 w-full h-24 flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 shadow-inner">
         {submitted ? (
           <button
             onClick={handleNext}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg shadow-md"
+            className="bg-blue-700 text-white px-6 py-2 rounded-full shadow-lg transition hover:bg-blue-800"
           >
             Next
           </button>
         ) : userClick ? (
           <button
             onClick={handleSubmit}
-            className="bg-green-600 text-white px-6 py-2 rounded-lg shadow-md"
+            className="bg-green-700 text-white px-6 py-2 rounded-full shadow-lg transition hover:bg-green-800"
           >
             Submit
           </button>
         ) : (
-          <p>Please click on the map to guess the location</p>
+          <p className="text-white text-xl font-semibold">
+            Please click on the map to guess the location
+          </p>
         )}
       </div>
 
       {/* Final Modal */}
       {showFinalModal && (
         <div
-          className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
+          className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-75"
           style={{ zIndex: 9999 }}
         >
-          <div className="bg-white rounded-lg p-6 w-80 text-center shadow-xl">
-            <h3 className="text-2xl font-bold mb-4">Game Over!</h3>
-            <p className="mb-4">Total error: {totalScore}km</p>
-            <button
-              onClick={handleRestart}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md"
-            >
-              Restart Game
-            </button>
+          <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-8 shadow-2xl w-[40rem]">
+            <h3 className="text-4xl font-extrabold text-white mb-4">Game Finished!</h3>
+            <p className="text-xl text-gray-200 mb-6">
+              Total score: {totalScore}km
+            </p>
+            <div className="text-right">
+              <button
+                onClick={handleRestart}
+                className="bg-white text-indigo-600 font-bold px-6 py-3 rounded-full shadow-lg transition hover:bg-gray-100"
+              >
+                Restart Game
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -249,25 +259,25 @@ export default function App() {
       {/* Intro Modal */}
       {showIntroModal && (
         <div
-          className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50"
+          className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-75"
           style={{ zIndex: 10000 }}
         >
-          <div className="bg-white rounded-lg p-6 w-[40rem] text-center shadow-xl">
-            <h3 className="text-2xl font-bold mb-4">Welcome to Streets of Buenos Aires!</h3>
-            <p className="text-left mb-4">
-              <ul>
-              <li>In this game, you'll be given street names from the City of Buenos Aires.</li><br/>
-              <li>You will have to guess its location by clicking on the map and pits location, then press "Submit" to see the actual street, a dashed blue line showing your error, and your score.</li><br/>
-              <li> The game consists of {TOTAL_ROUNDS} rounds.</li><br/>
-              </ul>
-              Good luck!
+          <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl p-8 shadow-2xl w-[40rem]">
+            <h3 className="text-4xl font-extrabold text-white mb-4">Welcome to Buenos Aires street learner!</h3>
+            <p className="text-xl text-gray-200 mb-6">
+              Discover the hidden streets of the City of Buenos Aires.
+              In this game, you'll be challenged to locate real streets on a map without labels.
+              Place your guess and see how close you get to the actual location.
+              Compete through {TOTAL_ROUNDS} rounds to achieve the best score.
             </p>
-            <button
-              onClick={() => setShowIntroModal(false)}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow-md"
-            >
-              Start Game
-            </button>
+            <div className="text-right">
+              <button
+                onClick={() => setShowIntroModal(false)}
+                className="bg-white text-indigo-600 font-bold px-6 py-3 rounded-full shadow-lg transition hover:bg-gray-100"
+              >
+                Start Game
+              </button>
+            </div>
           </div>
         </div>
       )}
