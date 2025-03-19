@@ -273,7 +273,7 @@ export default function App() {
               Discover the hidden streets of the City of Buenos Aires.
               In this game, you'll be challenged to locate real streets on a map without labels.
               Place your guess and see how close you get to the actual location.
-              Compete through {TOTAL_ROUNDS+1} rounds to achieve the best score.
+              Compete through {TOTAL_ROUNDS} rounds to achieve the best score.
 
             </p>
             <div className="text-right">
